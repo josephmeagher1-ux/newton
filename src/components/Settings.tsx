@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getSetting, setSetting } from '../providers/settings-helper';
 import { getStorageEstimate } from '../storage/persist';
 import { fetchOpenRouterUsage, fetchOpenRouterModels, type OpenRouterModel, type OpenRouterUsage } from '../providers/openrouter';
-import { DEEPSEEK_MODELS } from '../providers/deepseek';
+import { fetchDeepSeekModels, type DeepSeekModel } from '../providers/deepseek';
 import { ArrowLeft, Key, HardDrive, Trash2, Sun, Eye, EyeOff, FolderOpen, FolderX, DollarSign, Cpu, RefreshCw } from 'lucide-react';
 import { hasLinkedFolder, linkFolder, unlinkFolder, getLinkedFolder } from '../storage/folder-access';
 
@@ -26,6 +26,8 @@ export function Settings() {
   const [visionProvider, setVisionProvider] = useState<'openrouter' | 'deepseek'>('openrouter');
   const [orTextModel, setOrTextModel] = useState('');
   const [orVisionModel, setOrVisionModel] = useState('');
+  const [dsModels, setDsModels] = useState<DeepSeekModel[]>([]);
+  const [loadingDsModels, setLoadingDsModels] = useState(false);
   const [models, setModels] = useState<OpenRouterModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [usage, setUsage] = useState<OpenRouterUsage | null>(null);
@@ -58,6 +60,10 @@ export function Settings() {
       if (ork) {
         const u = await fetchOpenRouterUsage();
         if (u) setUsage(u);
+      }
+      if (dk) {
+        const dm = await fetchDeepSeekModels();
+        if (dm.length > 0) setDsModels(dm);
       }
     })();
   }, []);
@@ -206,20 +212,47 @@ export function Settings() {
           <Cpu size={16} />
           <h2 className="text-sm font-medium uppercase tracking-wide">DeepSeek Model</h2>
         </div>
-        <div className="bg-surface rounded-xl p-1 flex gap-1">
-          {DEEPSEEK_MODELS.map(m => (
+        <div>
+          <input
+            type="text"
+            value={deepseekModel}
+            onChange={(e) => setDeepseekModel(e.target.value)}
+            placeholder="deepseek-chat"
+            className="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none font-mono"
+          />
+          <div className="flex items-center gap-2 mt-2">
             <button
-              key={m.id}
-              onClick={() => { setDeepseekModel(m.id); setSetting('deepseek_model', m.id); }}
-              className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
-                deepseekModel === m.id ? 'bg-accent text-bg' : 'text-muted hover:text-fg'
-              }`}
+              onClick={() => { setSetting('deepseek_model', deepseekModel); setSaved(true); setTimeout(() => setSaved(false), 2000); }}
+              className="px-3 py-1.5 rounded-lg bg-accent text-bg text-xs font-medium"
             >
-              {m.name}
+              {saved ? 'Saved' : 'Save'}
             </button>
-          ))}
+            <button
+              onClick={async () => { setLoadingDsModels(true); const m = await fetchDeepSeekModels(); if (m.length > 0) setDsModels(m); setLoadingDsModels(false); }}
+              disabled={loadingDsModels || !deepseekKey}
+              className="flex items-center gap-1 text-xs text-muted hover:text-fg disabled:opacity-40"
+            >
+              <RefreshCw size={12} className={loadingDsModels ? 'animate-spin' : ''} />
+              Refresh models
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-muted">Used for tutoring, questions, and text tasks.</p>
+        {dsModels.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {dsModels.map(m => (
+              <button
+                key={m.id}
+                onClick={() => { setDeepseekModel(m.id); setSetting('deepseek_model', m.id); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  deepseekModel === m.id ? 'bg-accent text-bg' : 'bg-surface text-muted hover:text-fg'
+                }`}
+              >
+                {m.id}
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-muted">Used for tutoring, questions, and text tasks. Type any model ID or pick from the list above.</p>
       </section>
 
       {/* Vision Provider */}

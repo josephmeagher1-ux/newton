@@ -4,10 +4,24 @@ import { getSetting } from './settings-helper';
 const BASE_URL = 'https://api.deepseek.com/v1';
 const DEFAULT_MODEL = 'deepseek-chat';
 
-export const DEEPSEEK_MODELS = [
-  { id: 'deepseek-chat', name: 'DeepSeek V3 (latest)', vision: false },
-  { id: 'deepseek-reasoner', name: 'DeepSeek R1 (reasoning)', vision: false },
-] as const;
+export interface DeepSeekModel {
+  id: string;
+  owned_by: string;
+}
+
+export async function fetchDeepSeekModels(): Promise<DeepSeekModel[]> {
+  const apiKey = await getSetting<string>('api_key_deepseek');
+  if (!apiKey) return [];
+
+  const resp = await fetch(`${BASE_URL}/models`, {
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+  });
+
+  if (!resp.ok) return [];
+
+  const json = await resp.json();
+  return (json.data ?? []) as DeepSeekModel[];
+}
 
 export class DeepSeekProvider implements LLMProvider {
   name = 'deepseek';
