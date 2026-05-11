@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #1a1714;
+  --color-fg: #f4ecd8;
+  --color-muted: #a89f91;
+  --color-border: #2e2a25;
+  --color-surface: #231f1b;
+  --color-surface-hover: #2e2a25;
+  --color-accent: #c49a6c;
+  --color-grade-red: #cc4444;
+  --color-grade-green: #44aa88;
+  --font-sans: "Source Serif 4", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* E Ink / high-contrast light mode — activates via system preference or .theme-light class */
+@media (prefers-color-scheme: light) {
+  :root:not(.theme-dark) {
+    --color-bg: #ffffff;
+    --color-fg: #111111;
+    --color-muted: #444444;
+    --color-border: #cccccc;
+    --color-surface: #f5f5f5;
+    --color-surface-hover: #e8e8e8;
+    --color-accent: #8b5e34;
+    --color-grade-red: #b91c1c;
+    --color-grade-green: #166534;
+  }
+}
+
+/* E Ink: pure black and white only — no grays */
+:root.theme-light {
+  --color-bg: #ffffff;
+  --color-fg: #000000;
+  --color-muted: #000000;
+  --color-border: #000000;
+  --color-surface: #ffffff;
+  --color-surface-hover: #ffffff;
+  --color-accent: #000000;
+  --color-grade-red: #000000;
+  --color-grade-green: #000000;
+}
+
+/* E Ink: black outlines on all interactive elements, inverted when selected */
+:root.theme-light button,
+:root.theme-light input,
+:root.theme-light textarea,
+:root.theme-light select,
+:root.theme-light [role="button"] {
+  border: 2px solid #000000 !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-radius: 8px;
+}
+
+:root.theme-light button:active,
+:root.theme-light button[aria-pressed="true"],
+:root.theme-light .eink-selected {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+/* E Ink: accent-colored buttons become inverted (white-on-black) */
+:root.theme-light button.bg-accent,
+:root.theme-light .bg-accent {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+/* E Ink: selected options in MCQ / theme toggles */
+:root.theme-light .border-accent {
+  border-color: #000000 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+/* E Ink: surface cards get black outline instead of gray fill */
+:root.theme-light .bg-surface {
+  background: #ffffff !important;
+  border: 1px solid #000000;
+}
+
+/* E Ink: progress bars */
+:root.theme-light .bg-accent.rounded-full {
+  background: #000000 !important;
+}
+
+/* E Ink: remove all box-shadows and opacity tricks */
+:root.theme-light * {
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+:root.theme-light .opacity-60,
+:root.theme-light .opacity-40 {
+  opacity: 1 !important;
+}
+
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
