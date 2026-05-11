@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSetting, setSetting } from '../providers/settings-helper';
 import { getStorageEstimate } from '../storage/persist';
-import { ArrowLeft, Key, HardDrive, Trash2, Sun, Eye, EyeOff, FolderOpen, FolderX } from 'lucide-react';
+import { fetchOpenRouterUsage, fetchOpenRouterModels, type OpenRouterModel, type OpenRouterUsage } from '../providers/openrouter';
+import { ArrowLeft, Key, HardDrive, Trash2, Sun, Eye, EyeOff, FolderOpen, FolderX, DollarSign, Cpu, RefreshCw } from 'lucide-react';
 import { hasLinkedFolder, linkFolder, unlinkFolder, getLinkedFolder } from '../storage/folder-access';
 
 export function Settings() {
   const navigate = useNavigate();
   const [deepseekKey, setDeepseekKey] = useState('');
-  const [anthropicKey, setAnthropicKey] = useState('');
+  const [openrouterKey, setOpenrouterKey] = useState('');
   const [storage, setStorage] = useState<{ usageMB: number; quotaMB: number } | null>(null);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -18,20 +19,36 @@ export function Settings() {
   const [folderName, setFolderName] = useState<string | null>(null);
   const [folderSupported] = useState(() => 'showDirectoryPicker' in window);
 
+  const [textModel, setTextModel] = useState('');
+  const [visionModel, setVisionModel] = useState('');
+  const [models, setModels] = useState<OpenRouterModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [usage, setUsage] = useState<OpenRouterUsage | null>(null);
+  const [loadingUsage, setLoadingUsage] = useState(false);
+  const [modelFilter, setModelFilter] = useState('');
+
   useEffect(() => {
     (async () => {
       const dk = await getSetting<string>('api_key_deepseek');
-      const ak = await getSetting<string>('api_key_anthropic');
+      const ork = await getSetting<string>('api_key_openrouter');
       const savedTheme = await getSetting<'system' | 'dark' | 'light'>('theme');
+      const savedTextModel = await getSetting<string>('openrouter_model_text');
+      const savedVisionModel = await getSetting<string>('openrouter_model_vision');
       if (dk) setDeepseekKey(dk);
-      if (ak) setAnthropicKey(ak);
+      if (ork) setOpenrouterKey(ork);
       if (savedTheme) setTheme(savedTheme);
+      if (savedTextModel) setTextModel(savedTextModel);
+      if (savedVisionModel) setVisionModel(savedVisionModel);
       setStorage(await getStorageEstimate());
       const linked = await hasLinkedFolder();
       setFolderLinked(linked);
       if (linked) {
         const handle = await getLinkedFolder();
         if (handle) setFolderName(handle.name);
+      }
+      if (ork) {
+        const u = await fetchOpenRouterUsage();
+        if (u) setUsage(u);
       }
     })();
   }, []);
@@ -46,42 +63,53 @@ export function Settings() {
 
   const handleSave = async () => {
     await setSetting('api_key_deepseek', deepseekKey);
-    await setSetting('api_key_anthropic', anthropicKey);
+    await setSetting('api_key_openrouter', openrouterKey);
+    if (textModel) await setSetting('openrouter_model_text', textModel);
+    if (visionModel) await setSetting('openrouter_model_vision', visionModel);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const testKeys = async () => {
     setTesting(true);
+    const errors: string[] = [];
     try {
       if (deepseekKey) {
         const resp = await fetch('https://api.deepseek.com/v1/models', {
           headers: { Authorization: `Bearer ${deepseekKey}` },
         });
-        if (!resp.ok) throw new Error(`DeepSeek: ${resp.status}`);
+        if (!resp.ok) errors.push(`DeepSeek: ${resp.status}`);
       }
-      if (anthropicKey) {
-        const resp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'x-api-key': anthropicKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-5-20241022',
-            max_tokens: 1,
-            messages: [{ role: 'user', content: 'test' }],
-          }),
+      if (openrouterKey) {
+        const resp = await fetch('https://openrouter.ai/api/v1/auth/key', {
+          headers: { Authorization: `Bearer ${openrouterKey}` },
         });
-        if (!resp.ok && resp.status !== 400) throw new Error(`Anthropic: ${resp.status}`);
+        if (!resp.ok) errors.push(`OpenRouter: ${resp.status}`);
+        else {
+          const u = await fetchOpenRouterUsage();
+          if (u) setUsage(u);
+        }
       }
+      if (errors.length > 0) throw new Error(errors.join(', '));
       alert('Keys validated successfully');
     } catch (e) {
       alert(`Validation failed: ${e instanceof Error ? e.message : String(e)}`);
     }
     setTesting(false);
+  };
+
+  const loadModels = async () => {
+    setLoadingModels(true);
+    const m = await fetchOpenRouterModels();
+    setModels(m);
+    setLoadingModels(false);
+  };
+
+  const refreshUsage = async () => {
+    setLoadingUsage(true);
+    const u = await fetchOpenRouterUsage();
+    if (u) setUsage(u);
+    setLoadingUsage(false);
   };
 
   const clearAll = async () => {
@@ -93,6 +121,13 @@ export function Settings() {
     window.location.reload();
   };
 
+  const filteredModels = modelFilter
+    ? models.filter(m =>
+        m.id.toLowerCase().includes(modelFilter.toLowerCase()) ||
+        m.name.toLowerCase().includes(modelFilter.toLowerCase())
+      )
+    : models;
+
   return (
     <div className="flex-1 flex flex-col p-6 overflow-auto">
       <header className="flex items-center gap-3 mb-8">
@@ -102,6 +137,7 @@ export function Settings() {
         <h1 className="text-xl font-semibold">Settings</h1>
       </header>
 
+      {/* API Keys */}
       <section className="space-y-4 mb-8">
         <div className="flex items-center gap-2 text-muted mb-2">
           <Key size={16} />
@@ -117,8 +153,7 @@ export function Settings() {
                 onChange={(e) => setDeepseekKey(e.target.value)}
                 onPaste={(e) => {
                   e.preventDefault();
-                  const pasted = e.clipboardData.getData('text').trim();
-                  setDeepseekKey(pasted);
+                  setDeepseekKey(e.clipboardData.getData('text').trim());
                 }}
                 placeholder="sk-..."
                 autoComplete="off"
@@ -134,18 +169,17 @@ export function Settings() {
             </div>
           </div>
           <div>
-            <label className="text-sm text-muted block mb-1">Anthropic</label>
+            <label className="text-sm text-muted block mb-1">OpenRouter</label>
             <div className="relative">
               <input
                 type={showKeys ? 'text' : 'password'}
-                value={anthropicKey}
-                onChange={(e) => setAnthropicKey(e.target.value)}
+                value={openrouterKey}
+                onChange={(e) => setOpenrouterKey(e.target.value)}
                 onPaste={(e) => {
                   e.preventDefault();
-                  const pasted = e.clipboardData.getData('text').trim();
-                  setAnthropicKey(pasted);
+                  setOpenrouterKey(e.clipboardData.getData('text').trim());
                 }}
-                placeholder="sk-ant-..."
+                placeholder="sk-or-..."
                 autoComplete="off"
                 className="w-full bg-surface rounded-xl px-4 py-3 pr-12 text-sm outline-none font-mono"
               />
@@ -157,6 +191,7 @@ export function Settings() {
                 {showKeys ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+            <p className="text-xs text-muted mt-1">Used for vision/grading tasks. You pick the model below.</p>
           </div>
         </div>
         <div className="flex gap-3">
@@ -164,7 +199,7 @@ export function Settings() {
             onClick={handleSave}
             className="px-4 py-2 rounded-xl bg-accent text-bg text-sm font-medium"
           >
-            {saved ? 'Saved' : 'Save Keys'}
+            {saved ? 'Saved' : 'Save'}
           </button>
           <button
             onClick={testKeys}
@@ -176,6 +211,181 @@ export function Settings() {
         </div>
       </section>
 
+      {/* OpenRouter Cost */}
+      <section className="space-y-4 mb-8">
+        <div className="flex items-center gap-2 text-muted mb-2">
+          <DollarSign size={16} />
+          <h2 className="text-sm font-medium uppercase tracking-wide">OpenRouter Usage</h2>
+        </div>
+        {usage ? (
+          <div className="bg-surface rounded-xl p-4 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Spent</span>
+              <span className="font-mono">${usage.totalUsd.toFixed(4)}</span>
+            </div>
+            {usage.limitUsd != null && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span>Limit</span>
+                  <span className="font-mono">${usage.limitUsd.toFixed(2)}</span>
+                </div>
+                <div className="h-2 bg-bg rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-accent rounded-full"
+                    style={{ width: `${Math.min(100, (usage.totalUsd / usage.limitUsd) * 100)}%` }}
+                  />
+                </div>
+              </>
+            )}
+            {usage.rateLimitRequests != null && (
+              <div className="flex justify-between text-sm text-muted">
+                <span>Rate limit</span>
+                <span>{usage.rateLimitRequests} req / {usage.rateLimitInterval}</span>
+              </div>
+            )}
+            <button
+              onClick={refreshUsage}
+              disabled={loadingUsage}
+              className="flex items-center gap-1 text-xs text-muted hover:text-fg mt-1"
+            >
+              <RefreshCw size={12} className={loadingUsage ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted">
+            {openrouterKey ? 'Loading...' : 'Add an OpenRouter key to see usage'}
+          </p>
+        )}
+      </section>
+
+      {/* Model Selection */}
+      <section className="space-y-4 mb-8">
+        <div className="flex items-center gap-2 text-muted mb-2">
+          <Cpu size={16} />
+          <h2 className="text-sm font-medium uppercase tracking-wide">Models (OpenRouter)</h2>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm text-muted block mb-1">Text / Tutoring model</label>
+            <input
+              type="text"
+              value={textModel}
+              onChange={(e) => setTextModel(e.target.value)}
+              placeholder="deepseek/deepseek-chat-v3-0324"
+              className="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none font-mono"
+            />
+            <p className="text-xs text-muted mt-1">
+              Only used if you want OpenRouter for text tasks too. DeepSeek direct is used by default.
+            </p>
+          </div>
+          <div>
+            <label className="text-sm text-muted block mb-1">Vision / Grading model</label>
+            <input
+              type="text"
+              value={visionModel}
+              onChange={(e) => setVisionModel(e.target.value)}
+              placeholder="anthropic/claude-sonnet-4-5-20241022"
+              className="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none font-mono"
+            />
+          </div>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 rounded-xl bg-accent text-bg text-sm font-medium"
+          >
+            {saved ? 'Saved' : 'Save Models'}
+          </button>
+        </div>
+
+        {/* Browse models */}
+        <div className="pt-2">
+          <button
+            onClick={loadModels}
+            disabled={loadingModels}
+            className="flex items-center gap-2 text-sm text-muted hover:text-fg"
+          >
+            <RefreshCw size={14} className={loadingModels ? 'animate-spin' : ''} />
+            {models.length > 0 ? 'Refresh model list' : 'Browse available models'}
+          </button>
+        </div>
+
+        {models.length > 0 && (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={modelFilter}
+              onChange={(e) => setModelFilter(e.target.value)}
+              placeholder="Filter models..."
+              className="w-full bg-surface rounded-xl px-4 py-2 text-sm outline-none"
+            />
+            <div className="max-h-64 overflow-auto space-y-1 bg-surface rounded-xl p-2">
+              {filteredModels.slice(0, 50).map(m => (
+                <div key={m.id} className="flex items-start gap-2 px-2 py-1.5 hover:bg-surface-hover rounded-lg text-xs">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{m.name}</p>
+                    <p className="text-muted font-mono truncate">{m.id}</p>
+                    <p className="text-muted">
+                      {(m.contextLength / 1000).toFixed(0)}k ctx
+                      {m.promptPricing > 0 && ` · $${m.promptPricing.toFixed(2)}/$${m.completionPricing.toFixed(2)} per 1M`}
+                      {m.supportsImages && ' · vision'}
+                      {m.supportsTools && ' · tools'}
+                    </p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      onClick={() => { setTextModel(m.id); handleSave(); }}
+                      className="px-2 py-1 rounded bg-bg text-muted hover:text-fg text-[10px] uppercase"
+                      title="Use as text model"
+                    >
+                      Text
+                    </button>
+                    {m.supportsImages && (
+                      <button
+                        onClick={() => { setVisionModel(m.id); handleSave(); }}
+                        className="px-2 py-1 rounded bg-bg text-muted hover:text-fg text-[10px] uppercase"
+                        title="Use as vision model"
+                      >
+                        Vision
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {filteredModels.length > 50 && (
+                <p className="text-xs text-muted text-center py-1">
+                  {filteredModels.length - 50} more — refine your filter
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Display */}
+      <section className="space-y-4 mb-8">
+        <div className="flex items-center gap-2 text-muted mb-2">
+          <Sun size={16} />
+          <h2 className="text-sm font-medium uppercase tracking-wide">Display</h2>
+        </div>
+        <div className="bg-surface rounded-xl p-1 flex gap-1">
+          {([['system', 'System'], ['dark', 'Dark'], ['light', 'E Ink']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => handleThemeChange(id)}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                theme === id ? 'bg-accent text-bg' : 'text-muted hover:text-fg'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted">
+          E Ink mode uses high-contrast black-on-white for e-paper displays.
+        </p>
+      </section>
+
+      {/* Storage */}
       <section className="space-y-4 mb-8">
         <div className="flex items-center gap-2 text-muted mb-2">
           <HardDrive size={16} />
@@ -201,29 +411,7 @@ export function Settings() {
         )}
       </section>
 
-      <section className="space-y-4 mb-8">
-        <div className="flex items-center gap-2 text-muted mb-2">
-          <Sun size={16} />
-          <h2 className="text-sm font-medium uppercase tracking-wide">Display</h2>
-        </div>
-        <div className="bg-surface rounded-xl p-1 flex gap-1">
-          {([['system', 'System'], ['dark', 'Dark'], ['light', 'E Ink']] as const).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => handleThemeChange(id)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                theme === id ? 'bg-accent text-bg' : 'text-muted hover:text-fg'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-muted">
-          E Ink mode uses high-contrast black-on-white for e-paper displays.
-        </p>
-      </section>
-
+      {/* Study Folder */}
       {folderSupported && (
         <section className="space-y-4 mb-8">
           <div className="flex items-center gap-2 text-muted mb-2">
@@ -273,6 +461,7 @@ export function Settings() {
         </section>
       )}
 
+      {/* Danger Zone */}
       <section>
         <button
           onClick={clearAll}
