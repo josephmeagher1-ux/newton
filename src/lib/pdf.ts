@@ -63,6 +63,28 @@ export async function extractPageText(doc: PdfDocument, pageNum: number): Promis
     .join(' ');
 }
 
+export async function pageHasImages(doc: PdfDocument, pageNum: number): Promise<boolean> {
+  const page = await doc.getPage(pageNum);
+  const ops = await page.getOperatorList();
+  const imageOps = new Set([
+    pdfjsLib.OPS.paintImageXObject,
+    pdfjsLib.OPS.paintXObject,
+    pdfjsLib.OPS.paintImageMaskXObject,
+  ]);
+  return ops.fnArray.some((fn: number) => imageOps.has(fn));
+}
+
+export async function renderPageToJpeg(doc: PdfDocument, pageNum: number, scale = 1.5): Promise<Blob> {
+  const canvas = new OffscreenCanvas(1, 1);
+  const page = await doc.getPage(pageNum);
+  const viewport = page.getViewport({ scale });
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d')!;
+  await page.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport }).promise;
+  return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 });
+}
+
 export async function renderPageToCanvas(
   doc: PdfDocument,
   pageNum: number,

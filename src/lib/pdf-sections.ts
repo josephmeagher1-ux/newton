@@ -1,4 +1,4 @@
-import { extractPageText, type OutlineItem, type PdfDocument } from './pdf';
+import { extractPageText, pageHasImages, renderPageToJpeg, type OutlineItem, type PdfDocument } from './pdf';
 import { getDb, generateId } from '../storage/db';
 
 export interface ParsedSection {
@@ -68,34 +68,70 @@ function flattenOutline(
   return result;
 }
 
-export async function extractSectionText(
+export interface PageContent {
+  pageNum: number;
+  text: string;
+  hasImages: boolean;
+  imageUrl?: string;
+}
+
+export async function extractSectionContent(
   doc: PdfDocument,
   pdfId: string,
   section: ParsedSection,
-): Promise<string> {
+): Promise<PageContent[]> {
   const db = await getDb();
-  const pages: string[] = [];
+  const pages: PageContent[] = [];
 
   for (let p = section.pageStart; p <= section.pageEnd; p++) {
     const cacheKey = `${pdfId}:${p}`;
     const cached = await db.get('pdf_pages', cacheKey);
 
     if (cached) {
-      pages.push(cached.text);
+      pages.push({
+        pageNum: p,
+        text: cached.text,
+        hasImages: cached.hasImages,
+        imageUrl: cached.imageBlob ? URL.createObjectURL(cached.imageBlob) : undefined,
+      });
     } else {
       const text = await extractPageText(doc, p);
+      const hasImg = await pageHasImages(doc, p);
+      let imageBlob: Blob | undefined;
+
+      if (hasImg) {
+        imageBlob = await renderPageToJpeg(doc, p);
+      }
+
       await db.put('pdf_pages', {
         id: cacheKey,
         pdfId,
         pageNum: p,
         text,
+        hasImages: hasImg,
+        imageBlob,
         extractedAt: Date.now(),
       });
-      pages.push(text);
+
+      pages.push({
+        pageNum: p,
+        text,
+        hasImages: hasImg,
+        imageUrl: imageBlob ? URL.createObjectURL(imageBlob) : undefined,
+      });
     }
   }
 
-  return pages.join('\n\n--- Page Break ---\n\n');
+  return pages;
+}
+
+export async function extractSectionText(
+  doc: PdfDocument,
+  pdfId: string,
+  section: ParsedSection,
+): Promise<string> {
+  const content = await extractSectionContent(doc, pdfId, section);
+  return content.map(p => p.text).join('\n\n--- Page Break ---\n\n');
 }
 
 export async function getSectionsForPdf(pdfId: string): Promise<ParsedSection[]> {
@@ -122,6 +158,7 @@ export async function extractIndexText(doc: PdfDocument, pdfId: string, maxPages
         pdfId,
         pageNum: p,
         text,
+        hasImages: false,
         extractedAt: Date.now(),
       });
       pages.push(text);

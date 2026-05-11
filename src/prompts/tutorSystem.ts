@@ -39,6 +39,7 @@ GUIDELINES:
 - For follow-up questions, vary difficulty based on performance: full marks → harder, struggled → easier targeting the gap.
 - VARY THE MODALITY. Don't repeat the same type 3+ times unless the topic strictly requires it.
 - When the user submits an answer, grade it and provide feedback before the next question.
+- If the section content notes pages with figures/diagrams, reference them naturally (e.g. "Look at the diagram on page X"). The student sees these images in a panel they can toggle open.
 
 SECTION CONTENT:
 ${pageText}`;

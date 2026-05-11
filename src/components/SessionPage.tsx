@@ -3,14 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getPdf, touchPdf } from '../storage/pdf-store';
 import { generateId } from '../storage/db';
 import { loadPdfDocument, extractOutline } from '../lib/pdf';
-import { buildSectionsFromOutline, getSectionsForPdf, extractSectionText, type ParsedSection } from '../lib/pdf-sections';
+import { buildSectionsFromOutline, getSectionsForPdf, extractSectionContent, type ParsedSection, type PageContent } from '../lib/pdf-sections';
 import { useChat } from '../hooks/useChat';
 import { deepseek } from '../providers/registry';
 import { getToolDefs } from '../tools';
 import { getTutorSystemPrompt } from '../prompts/tutorSystem';
 import { QuestionRenderer } from './questions';
 import { InkCanvas } from './InkCanvas';
-import { ArrowLeft, Send, PenTool, Download } from 'lucide-react';
+import { ArrowLeft, Send, PenTool, Download, Image as ImageIcon } from 'lucide-react';
 import type { Question } from '../lib/question-schemas';
 import { exportProgressToFolder, readProgressFromFolder } from '../lib/session-progress';
 
@@ -31,9 +31,11 @@ export function SessionPage() {
   const [pdfName, setPdfName] = useState('');
   const [threadId] = useState(() => generateId());
   const [pageText, setPageText] = useState('');
+  const [pageContents, setPageContents] = useState<PageContent[]>([]);
   const [currentSection, setCurrentSection] = useState<ParsedSection | null>(null);
   const [input, setInput] = useState('');
   const [showCanvas, setShowCanvas] = useState(false);
+  const [showPageImages, setShowPageImages] = useState(false);
   const [priorProgress, setPriorProgress] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<{ resolve: (v: boolean) => void; tool: string; preview: string } | null>(null);
@@ -63,6 +65,12 @@ export function SessionPage() {
   });
 
   useEffect(() => {
+    return () => {
+      pageContents.forEach(p => { if (p.imageUrl) URL.revokeObjectURL(p.imageUrl); });
+    };
+  }, [pageContents]);
+
+  useEffect(() => {
     if (!pdfId) return;
     (async () => {
       const pdf = await getPdf(pdfId);
@@ -90,7 +98,13 @@ export function SessionPage() {
         if (section) {
           setCurrentSection(section);
           const doc = await loadPdfDocument(pdf.blob);
-          const text = await extractSectionText(doc, pdfId, section);
+          const contents = await extractSectionContent(doc, pdfId, section);
+          setPageContents(contents);
+          const pagesWithImages = contents.filter(p => p.hasImages).map(p => p.pageNum);
+          let text = contents.map(p => p.text).join('\n\n--- Page Break ---\n\n');
+          if (pagesWithImages.length > 0) {
+            text += `\n\n[NOTE: Pages ${pagesWithImages.join(', ')} contain figures/diagrams. The student can see these images alongside the text.]`;
+          }
           setPageText(text);
           doc.destroy();
         }
@@ -178,13 +192,40 @@ export function SessionPage() {
         >
           <ArrowLeft size={20} />
         </button>
-        <div className="truncate">
+        <div className="flex-1 truncate">
           <h1 className="text-lg font-medium truncate">{pdfName}</h1>
           {currentSection && (
             <p className="text-xs text-muted truncate">{currentSection.heading}</p>
           )}
         </div>
+        {pageContents.some(p => p.hasImages) && (
+          <button
+            onClick={() => setShowPageImages(!showPageImages)}
+            className={`p-2 rounded-lg transition-colors ${showPageImages ? 'bg-accent/20 text-accent' : 'hover:bg-surface-hover text-muted'}`}
+            aria-label="Toggle page images"
+            title="View page figures"
+          >
+            <ImageIcon size={20} />
+          </button>
+        )}
       </header>
+
+      {showPageImages && (
+        <div className="shrink-0 border-b border-border p-4 overflow-x-auto">
+          <div className="flex gap-4">
+            {pageContents.filter(p => p.hasImages && p.imageUrl).map(p => (
+              <div key={p.pageNum} className="shrink-0">
+                <img
+                  src={p.imageUrl}
+                  alt={`Page ${p.pageNum}`}
+                  className="max-h-64 rounded-lg border border-border"
+                />
+                <p className="text-xs text-muted text-center mt-1">Page {p.pageNum}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
         {chat.messages.filter(m => m.role !== 'system' && m.role !== 'tool').map((msg) => {

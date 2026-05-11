@@ -38,6 +38,8 @@ export interface LearnyDB extends DBSchema {
       pdfId: string;
       pageNum: number;
       text: string;
+      hasImages: boolean;
+      imageBlob?: Blob;
       extractedAt: number;
     };
     indexes: { 'by-pdf': string };
