@@ -2,7 +2,12 @@ import type { ChatChunk, ChatRequest, LLMProvider } from './types';
 import { getSetting } from './settings-helper';
 
 const BASE_URL = 'https://api.deepseek.com/v1';
-const MODEL = 'deepseek-v4-flash';
+const DEFAULT_MODEL = 'deepseek-chat';
+
+export const DEEPSEEK_MODELS = [
+  { id: 'deepseek-chat', name: 'DeepSeek V3 (latest)', vision: false },
+  { id: 'deepseek-reasoner', name: 'DeepSeek R1 (reasoning)', vision: false },
+] as const;
 
 export class DeepSeekProvider implements LLMProvider {
   name = 'deepseek';
@@ -14,8 +19,10 @@ export class DeepSeekProvider implements LLMProvider {
       return;
     }
 
+    const model = (await getSetting<string>('deepseek_model')) || DEFAULT_MODEL;
+
     const body: Record<string, unknown> = {
-      model: MODEL,
+      model,
       messages: req.messages,
       stream: true,
       temperature: req.temperature ?? 0.3,

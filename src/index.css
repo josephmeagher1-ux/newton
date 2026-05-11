@@ -24,9 +24,9 @@ html, body, #root {
   overflow: hidden;
 }
 
-/* E Ink / high-contrast light mode — activates via system preference or .theme-light class */
+/* System light preference */
 @media (prefers-color-scheme: light) {
-  :root:not(.theme-dark) {
+  :root:not(.theme-dark):not(.theme-eink) {
     --color-bg: #ffffff;
     --color-fg: #111111;
     --color-muted: #444444;
@@ -39,8 +39,21 @@ html, body, #root {
   }
 }
 
-/* E Ink: pure black and white only — no grays */
+/* Light mode — warm readable light theme */
 :root.theme-light {
+  --color-bg: #faf8f5;
+  --color-fg: #1a1714;
+  --color-muted: #6b6358;
+  --color-border: #d9d2c7;
+  --color-surface: #f0ece6;
+  --color-surface-hover: #e5dfda;
+  --color-accent: #8b5e34;
+  --color-grade-red: #b91c1c;
+  --color-grade-green: #166534;
+}
+
+/* E Ink: pure black and white only — no grays */
+:root.theme-eink {
   --color-bg: #ffffff;
   --color-fg: #000000;
   --color-muted: #000000;
@@ -53,59 +66,62 @@ html, body, #root {
 }
 
 /* E Ink: black outlines on all interactive elements, inverted when selected */
-:root.theme-light button,
-:root.theme-light input,
-:root.theme-light textarea,
-:root.theme-light select,
-:root.theme-light [role="button"] {
+:root.theme-eink button,
+:root.theme-eink input,
+:root.theme-eink textarea,
+:root.theme-eink select,
+:root.theme-eink [role="button"] {
   border: 2px solid #000000 !important;
   background: #ffffff !important;
   color: #000000 !important;
   border-radius: 8px;
 }
 
-:root.theme-light button:active,
-:root.theme-light button[aria-pressed="true"],
-:root.theme-light .eink-selected {
+:root.theme-eink button:active,
+:root.theme-eink button[aria-pressed="true"],
+:root.theme-eink .eink-selected {
   background: #000000 !important;
   color: #ffffff !important;
 }
 
 /* E Ink: accent-colored buttons become inverted (white-on-black) */
-:root.theme-light button.bg-accent,
-:root.theme-light .bg-accent {
+:root.theme-eink button.bg-accent,
+:root.theme-eink .bg-accent {
   background: #000000 !important;
   color: #ffffff !important;
 }
 
 /* E Ink: selected options in MCQ / theme toggles */
-:root.theme-light .border-accent {
+:root.theme-eink .border-accent {
   border-color: #000000 !important;
   background: #000000 !important;
   color: #ffffff !important;
 }
 
 /* E Ink: surface cards get black outline instead of gray fill */
-:root.theme-light .bg-surface {
+:root.theme-eink .bg-surface {
   background: #ffffff !important;
   border: 1px solid #000000;
 }
 
 /* E Ink: progress bars */
-:root.theme-light .bg-accent.rounded-full {
+:root.theme-eink .bg-accent.rounded-full {
   background: #000000 !important;
 }
 
 /* E Ink: remove all box-shadows and opacity tricks */
-:root.theme-light * {
+:root.theme-eink * {
   text-shadow: none !important;
   box-shadow: none !important;
 }
 
-:root.theme-light .opacity-60,
-:root.theme-light .opacity-40 {
+:root.theme-eink .opacity-60,
+:root.theme-eink .opacity-40 {
   opacity: 1 !important;
 }
+
+/* AI-injected CSS patches load here */
+#newton-patches {}
 
 @supports (padding: env(safe-area-inset-top)) {
   body {
