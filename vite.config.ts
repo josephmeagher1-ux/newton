@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: process.env.GITHUB_ACTIONS ? '/newton/' : '/',
+  base: process.env.DEPLOY_BASE ?? '/',
   plugins: [
     react(),
     tailwindcss(),
