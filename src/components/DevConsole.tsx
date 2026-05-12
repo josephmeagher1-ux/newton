@@ -1,9 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChat } from '../hooks/useChat';
+import { getProviderAsync } from '../providers/registry';
 import { deepseek } from '../providers/registry';
-import { getToolDefs } from '../tools';
-import { DEV_CONSOLE_SYSTEM_PROMPT } from '../prompts/devConsole';
+import { getRole, getRoleToolDefs } from '../prompts';
+import type { LLMProvider } from '../providers/types';
 import { generateId } from '../storage/db';
 import { ArrowLeft, Send, Terminal } from 'lucide-react';
 
@@ -14,16 +15,26 @@ export function DevConsole() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pendingConfirm, setPendingConfirm] = useState<{ resolve: (v: boolean) => void; tool: string; preview: string } | null>(null);
 
+  const devRole = useMemo(() => getRole('dev')!, []);
+  const [provider, setProvider] = useState<LLMProvider>(deepseek);
+
+  useEffect(() => {
+    getProviderAsync(devRole.provider).then(setProvider);
+  }, [devRole.provider]);
+
   const confirmHandler = useCallback((proposal: { tool: string; preview: string }) => {
     return new Promise<boolean>((resolve) => {
       setPendingConfirm({ ...proposal, resolve });
     });
   }, []);
 
+  const systemPrompt = useMemo(() => devRole.buildSystemPrompt({}), [devRole]);
+  const tools = useMemo(() => getRoleToolDefs(devRole), [devRole]);
+
   const chat = useChat({
-    provider: deepseek,
-    systemPrompt: DEV_CONSOLE_SYSTEM_PROMPT,
-    tools: getToolDefs(),
+    provider,
+    systemPrompt,
+    tools,
     threadId,
     onToolConfirm: confirmHandler,
   });
