@@ -5,9 +5,10 @@ import { generateId } from '../storage/db';
 import { loadPdfDocument, extractOutline } from '../lib/pdf';
 import { buildSectionsFromOutline, getSectionsForPdf, extractSectionContent, type ParsedSection, type PageContent } from '../lib/pdf-sections';
 import { useChat } from '../hooks/useChat';
+import { getProviderAsync } from '../providers/registry';
 import { deepseek } from '../providers/registry';
-import { getToolDefs } from '../tools';
-import { getTutorSystemPrompt } from '../prompts/tutorSystem';
+import { getRole, getRoleToolDefs } from '../prompts';
+import type { LLMProvider } from '../providers/types';
 import { QuestionRenderer } from './questions';
 import { InkCanvas } from './InkCanvas';
 import { ArrowLeft, Send, PenTool, Download, Image as ImageIcon } from 'lucide-react';
@@ -41,6 +42,13 @@ export function SessionPage() {
   const [pendingConfirm, setPendingConfirm] = useState<{ resolve: (v: boolean) => void; tool: string; preview: string } | null>(null);
 
   const sectionHeading = currentSection?.heading ?? 'Introduction';
+  const [provider, setProvider] = useState<LLMProvider>(deepseek);
+
+  const tutorRole = useMemo(() => getRole('tutor')!, []);
+
+  useEffect(() => {
+    getProviderAsync(tutorRole.provider).then(setProvider);
+  }, [tutorRole.provider]);
 
   const confirmHandler = useCallback((proposal: { tool: string; preview: string }) => {
     return new Promise<boolean>((resolve) => {
@@ -48,18 +56,17 @@ export function SessionPage() {
     });
   }, []);
 
-  const systemPrompt = useMemo(() => {
-    let prompt = getTutorSystemPrompt(sectionHeading, pageText);
-    if (priorProgress) {
-      prompt += `\n\nPRIOR STUDY PROGRESS (from previous sessions):\n${priorProgress}\n\nUse this to tailor difficulty and focus on weak areas. Don't repeat topics the student has mastered unless reviewing.`;
-    }
-    return prompt;
-  }, [sectionHeading, pageText, priorProgress]);
+  const systemPrompt = useMemo(
+    () => tutorRole.buildSystemPrompt({ sectionHeading, pageText, priorProgress: priorProgress ?? undefined }),
+    [tutorRole, sectionHeading, pageText, priorProgress],
+  );
+
+  const tools = useMemo(() => getRoleToolDefs(tutorRole), [tutorRole]);
 
   const chat = useChat({
-    provider: deepseek,
+    provider,
     systemPrompt,
-    tools: getToolDefs('read'),
+    tools,
     threadId,
     onToolConfirm: confirmHandler,
   });
