@@ -13,6 +13,10 @@ export interface RoleContext {
   markScheme?: string;
   extractedText?: string;
   priorProgress?: string;
+  sourceId?: string;
+  sectionId?: string;
+  sourcesSummary?: string;
+  scenarioBrief?: string;
 }
 
 export interface RoleConfig {

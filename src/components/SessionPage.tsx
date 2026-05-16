@@ -4,6 +4,7 @@ import { getPdf, touchPdf } from '../storage/pdf-store';
 import { generateId } from '../storage/db';
 import { loadPdfDocument, extractOutline } from '../lib/pdf';
 import { buildSectionsFromOutline, getSectionsForPdf, extractSectionContent, type ParsedSection, type PageContent } from '../lib/pdf-sections';
+import { hasIndex, buildIndexForPdf } from '../lib/search-index';
 import { useChat } from '../hooks/useChat';
 import { getProviderAsync } from '../providers/registry';
 import { deepseek } from '../providers/registry';
@@ -31,7 +32,6 @@ export function SessionPage() {
   const [sections, setSections] = useState<ParsedSection[]>([]);
   const [pdfName, setPdfName] = useState('');
   const [threadId] = useState(() => generateId());
-  const [pageText, setPageText] = useState('');
   const [pageContents, setPageContents] = useState<PageContent[]>([]);
   const [currentSection, setCurrentSection] = useState<ParsedSection | null>(null);
   const [input, setInput] = useState('');
@@ -56,9 +56,20 @@ export function SessionPage() {
     });
   }, []);
 
+  const sectionContextLine = useMemo(() => {
+    if (!currentSection || !pdfId) return undefined;
+    return `Source ID: ${pdfId} (${pdfName}). Section ID: ${currentSection.id}. Pages ${currentSection.pageStart}-${currentSection.pageEnd}. Call read_section({sourceId: "${pdfId}", sectionId: "${currentSection.id}"}) to load the content.`;
+  }, [currentSection, pdfId, pdfName]);
+
   const systemPrompt = useMemo(
-    () => tutorRole.buildSystemPrompt({ sectionHeading, pageText, priorProgress: priorProgress ?? undefined }),
-    [tutorRole, sectionHeading, pageText, priorProgress],
+    () => tutorRole.buildSystemPrompt({
+      sectionHeading,
+      sourceId: pdfId,
+      sectionId: currentSection?.id,
+      sectionContext: sectionContextLine,
+      priorProgress: priorProgress ?? undefined,
+    }),
+    [tutorRole, sectionHeading, pdfId, currentSection, sectionContextLine, priorProgress],
   );
 
   const tools = useMemo(() => getRoleToolDefs(tutorRole), [tutorRole]);
@@ -107,14 +118,13 @@ export function SessionPage() {
           const doc = await loadPdfDocument(pdf.blob);
           const contents = await extractSectionContent(doc, pdfId, section);
           setPageContents(contents);
-          const pagesWithImages = contents.filter(p => p.hasImages).map(p => p.pageNum);
-          let text = contents.map(p => p.text).join('\n\n--- Page Break ---\n\n');
-          if (pagesWithImages.length > 0) {
-            text += `\n\n[NOTE: Pages ${pagesWithImages.join(', ')} contain figures/diagrams. The student can see these images alongside the text.]`;
-          }
-          setPageText(text);
           doc.destroy();
         }
+      }
+
+      // Background: build search index for this PDF if not already indexed
+      if (!(await hasIndex(pdfId))) {
+        buildIndexForPdf(pdfId).catch(err => console.warn('[session] index build failed:', err));
       }
     })();
   }, [pdfId, sectionId]);
