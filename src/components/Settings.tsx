@@ -13,6 +13,7 @@ export function Settings() {
   const navigate = useNavigate();
   const [deepseekKey, setDeepseekKey] = useState('');
   const [openrouterKey, setOpenrouterKey] = useState('');
+  const [braveKey, setBraveKey] = useState('');
   const [storage, setStorage] = useState<{ usageMB: number; quotaMB: number } | null>(null);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -38,6 +39,7 @@ export function Settings() {
     (async () => {
       const dk = await getSetting<string>('api_key_deepseek');
       const ork = await getSetting<string>('api_key_openrouter');
+      const bk = await getSetting<string>('api_key_brave');
       const savedTheme = await getSetting<ThemeId>('theme');
       const savedDsModel = await getSetting<string>('deepseek_model');
       const savedVisionProv = await getSetting<string>('vision_provider');
@@ -45,6 +47,7 @@ export function Settings() {
       const savedOrVision = await getSetting<string>('openrouter_model_vision');
       if (dk) setDeepseekKey(dk);
       if (ork) setOpenrouterKey(ork);
+      if (bk) setBraveKey(bk);
       if (savedTheme) setTheme(savedTheme);
       if (savedDsModel) setDeepseekModel(savedDsModel);
       if (savedVisionProv === 'deepseek') setVisionProvider('deepseek');
@@ -79,6 +82,7 @@ export function Settings() {
   const handleSave = async () => {
     await setSetting('api_key_deepseek', deepseekKey);
     await setSetting('api_key_openrouter', openrouterKey);
+    await setSetting('api_key_brave', braveKey);
     await setSetting('deepseek_model', deepseekModel);
     await setSetting('vision_provider', visionProvider);
     if (orTextModel) await setSetting('openrouter_model_text', orTextModel);
@@ -187,6 +191,23 @@ export function Settings() {
                 onChange={(e) => setOpenrouterKey(e.target.value)}
                 onPaste={(e) => { e.preventDefault(); setOpenrouterKey(e.clipboardData.getData('text').trim()); }}
                 placeholder="sk-or-..."
+                autoComplete="off"
+                className="w-full bg-surface rounded-xl px-4 py-3 pr-12 text-sm outline-none font-mono"
+              />
+              <button type="button" onClick={() => setShowKeys(!showKeys)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
+                {showKeys ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm text-muted block mb-1">Brave Search <span className="text-xs">(optional — enables web_search tool)</span></label>
+            <div className="relative">
+              <input
+                type={showKeys ? 'text' : 'password'}
+                value={braveKey}
+                onChange={(e) => setBraveKey(e.target.value)}
+                onPaste={(e) => { e.preventDefault(); setBraveKey(e.clipboardData.getData('text').trim()); }}
+                placeholder="BSA..."
                 autoComplete="off"
                 className="w-full bg-surface rounded-xl px-4 py-3 pr-12 text-sm outline-none font-mono"
               />

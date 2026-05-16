@@ -28,8 +28,12 @@ export interface LearnyDB extends DBSchema {
       addedAt: number;
       lastOpenedAt: number;
       sizeBytes: number;
+      sourceType: SourceType;
+      publicationYear: number | null;
+      authority: string | null;
+      tier: 1 | 2 | 3;
     };
-    indexes: { 'by-added': number };
+    indexes: { 'by-added': number; 'by-tier': number };
   };
   pdf_pages: {
     key: string;
@@ -123,6 +127,8 @@ export interface LearnyDB extends DBSchema {
   };
 }
 
+export type SourceType = 'handbook' | 'guideline' | 'paper' | 'notes' | 'other';
+
 export type MigrationOp =
   | { type: 'createStore'; name: string; keyPath?: string; autoIncrement?: boolean }
   | { type: 'deleteStore'; name: string }
@@ -130,7 +136,7 @@ export type MigrationOp =
   | { type: 'deleteIndex'; store: string; name: string };
 
 const DB_NAME = 'newton-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbInstance: IDBPDatabase<LearnyDB> | null = null;
 
@@ -138,34 +144,55 @@ export async function getDb(): Promise<IDBPDatabase<LearnyDB>> {
   if (dbInstance) return dbInstance;
 
   dbInstance = await openDB<LearnyDB>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      const pdfs = db.createObjectStore('pdfs', { keyPath: 'id' });
-      pdfs.createIndex('by-added', 'addedAt');
+    async upgrade(db, oldVersion, _newVersion, tx) {
+      if (oldVersion < 1) {
+        const pdfs = db.createObjectStore('pdfs', { keyPath: 'id' });
+        pdfs.createIndex('by-added', 'addedAt');
 
-      const pdfPages = db.createObjectStore('pdf_pages', { keyPath: 'id' });
-      pdfPages.createIndex('by-pdf', 'pdfId');
+        const pdfPages = db.createObjectStore('pdf_pages', { keyPath: 'id' });
+        pdfPages.createIndex('by-pdf', 'pdfId');
 
-      const sections = db.createObjectStore('sections', { keyPath: 'id' });
-      sections.createIndex('by-pdf', 'pdfId');
+        const sections = db.createObjectStore('sections', { keyPath: 'id' });
+        sections.createIndex('by-pdf', 'pdfId');
 
-      const threads = db.createObjectStore('threads', { keyPath: 'id' });
-      threads.createIndex('by-section', 'sectionId');
+        const threads = db.createObjectStore('threads', { keyPath: 'id' });
+        threads.createIndex('by-section', 'sectionId');
 
-      const messages = db.createObjectStore('messages', { keyPath: 'id' });
-      messages.createIndex('by-thread', 'threadId');
+        const messages = db.createObjectStore('messages', { keyPath: 'id' });
+        messages.createIndex('by-thread', 'threadId');
 
-      const toolCalls = db.createObjectStore('tool_calls', { keyPath: 'id', autoIncrement: true });
-      toolCalls.createIndex('by-thread', 'threadId');
+        const toolCalls = db.createObjectStore('tool_calls', { keyPath: 'id', autoIncrement: true });
+        toolCalls.createIndex('by-thread', 'threadId');
 
-      const aiData = db.createObjectStore('ai_data', { keyPath: 'id' });
-      aiData.createIndex('by-type', 'type');
-      aiData.createIndex('by-thread', 'threadId');
+        const aiData = db.createObjectStore('ai_data', { keyPath: 'id' });
+        aiData.createIndex('by-type', 'type');
+        aiData.createIndex('by-thread', 'threadId');
 
-      const dynComp = db.createObjectStore('dynamic_components', { keyPath: 'id' });
-      dynComp.createIndex('by-subject', 'subject');
+        const dynComp = db.createObjectStore('dynamic_components', { keyPath: 'id' });
+        dynComp.createIndex('by-subject', 'subject');
 
-      db.createObjectStore('settings', { keyPath: 'key' });
-      db.createObjectStore('_migrations', { autoIncrement: true });
+        db.createObjectStore('settings', { keyPath: 'key' });
+        db.createObjectStore('_migrations', { autoIncrement: true });
+      }
+
+      if (oldVersion < 2) {
+        const pdfsStore = tx.objectStore('pdfs');
+        pdfsStore.createIndex('by-tier', 'tier');
+        let cursor = await pdfsStore.openCursor();
+        while (cursor) {
+          const v = cursor.value as Partial<LearnyDB['pdfs']['value']>;
+          if (v.sourceType === undefined) {
+            await cursor.update({
+              ...v,
+              sourceType: 'handbook',
+              publicationYear: null,
+              authority: null,
+              tier: 2,
+            } as LearnyDB['pdfs']['value']);
+          }
+          cursor = await cursor.continue();
+        }
+      }
     },
     blocked() {
       console.warn('[db] Upgrade blocked — close other tabs');
